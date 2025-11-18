@@ -108,7 +108,7 @@ pipeline {
                 def jsonEndpointObj;
                 def endpoint;
                 def size = 0;
-                def maxRetries = 3;
+                def maxRetries = 20;
                 def retryCount = 0;
                 def endpointFound = false;
                 
@@ -170,5 +170,6 @@ pipeline {
   }
 
 }
+
 
 
