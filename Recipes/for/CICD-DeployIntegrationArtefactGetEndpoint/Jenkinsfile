@@ -110,40 +110,49 @@ pipeline {
                 def size = 0;
                 def maxRetries = 3;
                 def retryCount = 0;
-                def success = false;
+                def endpointFound = false;
                 
-                while (retryCount < maxRetries && !success) {
-                    try {
-                        println("Attempting to get endpoint (Attempt ${retryCount + 1} of ${maxRetries}).");
-                        //Get endpoint as configured above
-                        endpointResp = httpRequest acceptType: 'APPLICATION_JSON',
-                            customHeaders: [
-                                [maskValue: false, name: 'Authorization', value: env.token]
-                            ],
-                            httpMode: 'GET',
-                            responseHandle: 'LEAVE_OPEN',
-                            timeout: 30,
-                            url: 'https://' + "${env.CPIHost}" + '/api/v1/ServiceEndpoints?$filter=Name%20eq%20\'' + "${env.IntegrationFlowID}" + '\'&$select=EntryPoints&$format=json&$expand=EntryPoints'
-                        
-                        jsonEndpointObj = readJSON text: endpointResp.content;
-                        endpoint = jsonEndpointObj.d.results.EntryPoints.results.Url;
-                        size = (jsonEndpointObj.d.results.EntryPoints.results).size();
+                while (retryCount < maxRetries && !endpointFound) {
+                    println("Attempting to get endpoint (Attempt ${retryCount + 1} of ${maxRetries}).");
+                    
+                    //Get endpoint as configured above
+                    endpointResp = httpRequest acceptType: 'APPLICATION_JSON',
+                        customHeaders: [
+                            [maskValue: false, name: 'Authorization', value: env.token]
+                        ],
+                        httpMode: 'GET',
+                        responseHandle: 'LEAVE_OPEN',
+                        timeout: 30,
+                        url: 'https://' + "${env.CPIHost}" + '/api/v1/ServiceEndpoints?$filter=Name%20eq%20\'' + "${env.IntegrationFlowID}" + '\'&$select=EntryPoints&$format=json&$expand=EntryPoints'
+                    
+                    jsonEndpointObj = readJSON text: endpointResp.content;
+                    
+                    // Check the size of the results array
+                    size = (jsonEndpointObj.d.results).size(); 
+                    
+                    if (size != 0) {
+                        // Success: results found
+                        endpoint = jsonEndpointObj.d.results[0].EntryPoints.results.Url; // Access the first element
                         endpointResp.close();
-                        success = true; // Set success to true to exit the loop
-                        
-                    } catch (Exception e) {
-                        println("ServiceEndpoint API call failed: ${e.getMessage()}");
+                        endpointFound = true; // Set success to true to exit the loop
+                    } else {
+                        // Failure condition: results array is empty
+                        println("ServiceEndpoint API call returned empty results.");
                         retryCount++;
                         if (retryCount < maxRetries) {
                             println("Sleeping for 5 seconds before retrying...");
                             sleep time: 5, unit: 'SECONDS';
                         }
                     }
+                    // Close response handle if it was left open and not closed on success
+                    if (!endpointFound) {
+                        endpointResp.close();
+                    }
                 }
                 
-                // Check if the loop completed without success
-                if (!success) {
-                    error("Failed to retrieve Service Endpoint after ${maxRetries} attempts.");
+                // Check if the loop completed without finding the endpoint
+                if (!endpointFound) {
+                    error("Failed to retrieve Service Endpoint (empty results) after ${maxRetries} attempts.");
                 }
                 // END: Minimal change for retry logic
 
@@ -161,4 +170,5 @@ pipeline {
   }
 
 }
+
 
