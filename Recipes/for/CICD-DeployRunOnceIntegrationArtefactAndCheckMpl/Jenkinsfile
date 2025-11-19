@@ -6,7 +6,7 @@ pipeline {
     IntegrationFlowID = "${env.IntegrationFlowID}"
     FailJobOnFailedMPL = "${env.FailJobOnFailedMPL}" //if you are expecting your message to fail, set this to false, so that your job won't fail
     DeploymentCheckRetryCounter = "${env.DeploymentCheckRetryCounter}" //multiply by 3 to get the maximum deployment time
-    MPLCheckRetryCounter = ${env.MPLCheckRetryCounter}" //multiply by 3 to get the maximum processing time. Example: 10 would be sufficient for message processings <30s
+    MPLCheckRetryCounter = "${env.MPLCheckRetryCounter}" //multiply by 3 to get the maximum processing time. Example: 10 would be sufficient for message processings <30s
     CPIHost = "${env.CPI_HOST}"
     CPIOAuthHost = "${env.CPI_OAUTH_HOST}"
     CPIOAuthCredentials = "${env.CPI_OAUTH_CRED}"
