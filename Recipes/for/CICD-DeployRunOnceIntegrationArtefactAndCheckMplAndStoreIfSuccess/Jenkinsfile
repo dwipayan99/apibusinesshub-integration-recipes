@@ -188,36 +188,54 @@ pipeline {
             //download and extract artefact from tenant
             println("Downloading artefact");
             def tempfile = UUID.randomUUID().toString() + ".zip";
-            def cpiDownloadResponse = httpRequest acceptType: 'APPLICATION_ZIP',
-              customHeaders: [
-                [maskValue: false, name: 'Authorization', value: token]
-              ],
-              ignoreSslErrors: false,
-              responseHandle: 'LEAVE_OPEN',
-              timeout: 30,
-              outputFile: tempfile,
-              url: 'https://' + env.CPIHost + '/api/v1/IntegrationDesigntimeArtifacts(Id=\'' + env.IntegrationFlowID + '\',Version=\'active\')/$value';
-            def disposition = cpiDownloadResponse.headers.toString();
-            def index = disposition.indexOf('filename') + 9;
-            def lastindex = disposition.indexOf('.zip', index);
-            def filename = disposition.substring(index + 1, lastindex + 4);
-            def folder = env.GITFolder + '/' + filename.substring(0, filename.indexOf('.zip'));
-            fileOperations([fileUnZipOperation(filePath: tempfile, targetLocation: folder)])
-            cpiDownloadResponse.close();
+			
+			def cpiDownloadResponse
+			// Retry download a few times to survive transient SSL / network glitches
+			retry(3) {
+				// small pause between retries
+				sleep 5
 
-            //remove the zip
-            fileOperations([fileDeleteOperation(excludes: '', includes: tempfile)])
+				cpiDownloadResponse = httpRequest(
+				  acceptType: 'APPLICATION_ZIP',
+				  customHeaders: [
+					[maskValue: false, name: 'Authorization', value: token]
+				  ],
+				  // set to true to work around trust / handshake oddities, especially in trial / non-prod
+				  ignoreSslErrors: true,
+				  responseHandle: 'LEAVE_OPEN',
+				  timeout: 60,
+				  outputFile: tempfile,
+				  url: 'https://' + env.CPIHost +
+					   '/api/v1/IntegrationDesigntimeArtifacts(Id=\'' +
+					   env.IntegrationFlowID + '\',Version=\'active\')/$value'
+				)
+			  }            
+				// Parse filename from Content-Disposition header
+			  def disposition = cpiDownloadResponse.headers.toString()
+			  def index = disposition.indexOf('filename') + 9
+			  def lastindex = disposition.indexOf('.zip', index)
+			  def filename = disposition.substring(index + 1, lastindex + 4)
 
-            dir(folder) {
-              sh 'git add .'
-            }
-            println("Store integration artefact in Git")
-            withCredentials([
-              [$class: 'UsernamePasswordMultiBinding', credentialsId: env.GITCredentials, usernameVariable: 'GitUserName', passwordVariable: 'GitPassword']
-            ]) {
-              sh 'git diff-index --quiet HEAD || git commit -am ' + '\'' + env.GITComment + '\''
-              sh('git push https://${GitUserName}:${GitPassword}@' + env.GITRepositoryURL  + ' HEAD:' + env.GITBranch)
-            }
+			  // target folder is based on artefact name
+			  def folder = env.GITFolder + '/' + filename.substring(0, filename.indexOf('.zip'))
+
+			  // unzip into target folder
+			  fileOperations([fileUnZipOperation(filePath: tempfile, targetLocation: folder)])
+			  cpiDownloadResponse.close()
+
+				//remove the zip
+			  fileOperations([fileDeleteOperation(excludes: '', includes: tempfile)])
+
+			  dir(folder) {
+				sh 'git add .'
+			  }
+             println("Store integration artefact in Git")
+          withCredentials([
+            [$class: 'UsernamePasswordMultiBinding', credentialsId: env.GITCredentials, usernameVariable: 'GitUserName', passwordVariable: 'GitPassword']
+          ]) {
+            sh 'git diff-index --quiet HEAD || git commit -am ' + '\'' + env.GITComment + '\''
+            sh('git push https://${GitUserName}:${GitPassword}@' + env.GITRepositoryURL  + ' HEAD:' + env.GITBranch)
+          }
         }
       }
     }
